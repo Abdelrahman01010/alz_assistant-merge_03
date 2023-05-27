@@ -1,0 +1,10 @@
+me-sample0.wav
+me-sample1.wav
+me-sample2.wav
+me-sample3.wav
+me-sample4.wav
+speaker-sample0.wav
+speaker-sample1.wav
+speaker-sample2.wav
+speaker-sample3.wav
+speaker-sample4.wav
