@@ -14,6 +14,7 @@ import python_speech_features as mfcc
 from sklearn.mixture import GaussianMixture
 import speech_recognition as sr
 import math
+import random
 
 
 def calculate_delta(array):
@@ -40,13 +41,16 @@ def calculate_delta(array):
                      (2 * (array[index[1][0]]-array[index[1][1]]))) / 10
     return deltas
 
+
 def extract_features(audio, rate):
-    mfcc_feature = mfcc.mfcc(audio, rate, 0.025, 0.01, 20, nfft=1200, appendEnergy=True)
+    mfcc_feature = mfcc.mfcc(audio, rate, 0.025, 0.01,
+                             20, nfft=1200, appendEnergy=True)
     mfcc_feature = preprocessing.scale(mfcc_feature)
     print(mfcc_feature)
     delta = calculate_delta(mfcc_feature)
     combined = np.hstack((mfcc_feature, delta))
     return combined
+
 
 def train_model():
 
@@ -83,16 +87,17 @@ def train_model():
             count = 0
         count = count + 1
 
+
 def test_model():
 
     source = "conversation_analysis/testing_set/"
     modelpath = "conversation_analysis/trained_models/"
     test_file = "conversation_analysis/testing_set_addition.txt"
     file_paths = open(test_file, 'r')
-    result=""
+    result = ""
 
-    gmm_files = [os.path.join(modelpath, fname) for fname in 
-                 os.listdir(modelpath) if fname.endswith('.gmm')]      #### making a list of trained model files paths
+    gmm_files = [os.path.join(modelpath, fname) for fname in
+                 os.listdir(modelpath) if fname.endswith('.gmm')]  # making a list of trained model files paths
 
     # Load the Gaussian gender Models
     models = [pickle.load(open(fname, 'rb')) for fname in gmm_files]
@@ -101,9 +106,10 @@ def test_model():
 
     # Read the test directory and get the list of test audio files
     for path in file_paths:
-        path = path.strip() #removes white space in path (in this case path is 'sample.wav' written in testing_set_addition.txt)
+        # removes white space in path (in this case path is 'sample.wav' written in testing_set_addition.txt)
+        path = path.strip()
         print(path)
-        sr, audio = read(source + path) #reading wav file
+        sr, audio = read(source + path)  # reading wav file
 
         vector = extract_features(audio, sr)
 
@@ -115,110 +121,157 @@ def test_model():
             log_likelihood[i] = scores.sum()
 
         winner = np.argmax(log_likelihood)
-        #print(speakers[winner][17:])
-        result=speakers[winner][37:]
+        # print(speakers[winner][17:])
+        result = speakers[winner][37:]
         time.sleep(1.0)
     return result
 
+
 def split_audio(myaudio):
     song = AudioSegment.from_wav(myaudio)
-    silence_ranges_list=detect_silence(audio_segment=song, min_silence_len=500, silence_thresh=-25, seek_step=1)
+    silence_ranges_list = detect_silence(
+        audio_segment=song, min_silence_len=500, silence_thresh=-25, seek_step=1)
     # print(silence_ranges_list)
     # print(len(silence_ranges_list))
-    mytalk=[]
-    nonsilence_ranges_list=[]
+    mytalk = []
+    nonsilence_ranges_list = []
     for i in range(len(silence_ranges_list)-1):
         newAudio = AudioSegment.from_file(myaudio)
-        tx=silence_ranges_list[i][1]-500
-        ty=silence_ranges_list[i+1][0]+500
-        nonsilence_ranges_list.append([tx,ty])
+        tx = silence_ranges_list[i][1]-500
+        ty = silence_ranges_list[i+1][0]+500
+        nonsilence_ranges_list.append([tx, ty])
         newAudio = newAudio[tx:ty]
-        print(tx,ty)
-        newAudio.export('conversation_analysis/testing_set/temp_sample.wav', format="wav")
+        print(tx, ty)
+        newAudio.export(
+            'conversation_analysis/testing_set/temp_sample.wav', format="wav")
         mytalk.append(test_model())
         time.sleep(0.1)
     # print(mytalk)
     # print(len(mytalk))
+
     def create_labelling(labels):
         labelling = []
         start_time = nonsilence_ranges_list[0][0]
         for i in range(len(mytalk)):
-            if i>0 and labels[i]!=labels[i-1]:
-                    temp = [str(labels[i-1]),start_time,nonsilence_ranges_list[i-1][1]]
-                    labelling.append(tuple(temp))
-                    start_time = nonsilence_ranges_list[i][0]        
-            if i==len(nonsilence_ranges_list)-1:
-                    temp = [str(labels[i]),start_time,nonsilence_ranges_list[i][1]]
-                    labelling.append(tuple(temp))
+            if i > 0 and labels[i] != labels[i-1]:
+                temp = [str(labels[i-1]), start_time,
+                        nonsilence_ranges_list[i-1][1]]
+                labelling.append(tuple(temp))
+                start_time = nonsilence_ranges_list[i][0]
+            if i == len(nonsilence_ranges_list)-1:
+                temp = [str(labels[i]), start_time,
+                        nonsilence_ranges_list[i][1]]
+                labelling.append(tuple(temp))
         return labelling
     labelling = create_labelling(mytalk)
     print(labelling)
     print(len(labelling))
     return labelling
 
+
 def speech_to_dialogue(labelling):
     r = sr.Recognizer()
     dialogue_length = len(labelling)
     conversation = ""
 
-    #audio = r.listen('Small Talk2.wav', phrase_time_limit=20)
+    # audio = r.listen('Small Talk2.wav', phrase_time_limit=20)
 
     for i in range(dialogue_length):
-        newAudio = AudioSegment.from_file("conversation_analysis/conversation_audio/conversation00.wav")
-        t1=labelling[i][1]
-        t2=labelling[i][2]
+        newAudio = AudioSegment.from_file(
+            "conversation_analysis/conversation_audio/conversation00.wav")
+        t1 = labelling[i][1]
+        t2 = labelling[i][2]
         newAudio = newAudio[t1:t2]
         newAudio.export('tempAudio.wav', format="wav")
         try:
             clean_support_call = sr.AudioFile('tempAudio.wav')
             with clean_support_call as source:
                 clean_support_call_audio = r.record(source)
-            mytext = r.recognize_google(clean_support_call_audio, language="en-US")
-            #print("You said : {}".format(mytext))
+            mytext = r.recognize_google(
+                clean_support_call_audio, language="en-US")
+            # print("You said : {}".format(mytext))
             language = 'en'
-            if(labelling[i][0]=="me"):
+            if (labelling[i][0] == "me"):
                 conversation = conversation+"You: "+mytext+"\n"
             else:
                 conversation = conversation+"Speaker: "+mytext+"\n"
         except sr.UnknownValueError:
             print("Sorry, could not recognize what you said or you stopped talking")
-      
+
         # note that there is an error called request error that happens when internet service is poor (in video in links)
         except sr.RequestError:
             print("Request error")
     print(conversation)
     return conversation
 
+
 def patient_train(audioFilePath):
     audio = AudioSegment.from_file(audioFilePath)
     length_ms = len(audio)
     print(length_ms)
-    sub_length=math.floor(length_ms/5)
-    for i in range (0,5):
-        tx=i*sub_length
-        ty=((i+1)*sub_length)
+    sub_length = math.floor(length_ms/5)
+    for i in range(0, 5):
+        tx = i*sub_length
+        ty = ((i+1)*sub_length)
         tempaudio = audio[tx:ty]
-        tempaudio.export(f'conversation_analysis/training_set/me-sample{i}.wav', format="wav")
-        tempaudio.export(f'conversation_analysis/training_set/me-sample{i+5}.wav', format="wav")
+        tempaudio.export(
+            f'conversation_analysis/training_set/me-sample{i}.wav', format="wav")
+        tempaudio.export(
+            f'conversation_analysis/training_set/me-sample{i+5}.wav', format="wav")
         print(tx, "to", ty)
     train_model()
 
+
 def speaker_train(audioFilePath):
+    audio = AudioSegment.from_file(audioFilePath)
+    chunks = []
+    length_ms = len(audio)
+    print(length_ms)
+    sub_length = math.floor(length_ms/20)
+    for i in range(0, 20):
+        tx = i*sub_length
+        ty = (i+1)*sub_length
+        tempaudio = audio[tx:ty]
+        chunks.append(tempaudio)
+        # tempaudio.export(f'./training_set/speaker-sample{i}.wav', format="wav")
+        # print(i*sub_length, "to", (i+1)*sub_length)
+    random.shuffle(chunks)
+    shuffled_audio = chunks[0]+chunks[1]+chunks[2]+chunks[3]+chunks[4]+chunks[5]+chunks[6]+chunks[7]+chunks[8]+chunks[9] + \
+        chunks[10]+chunks[11]+chunks[12]+chunks[13]+chunks[14] + \
+        chunks[15]+chunks[16]+chunks[17]+chunks[18]+chunks[19]
+    shuffled_audio.export("conversation_analysis/shuffled.wav", format="mp3")
+    audio = AudioSegment.from_file("conversation_analysis/shuffled.wav")
+    sub_length = math.floor(length_ms/20)
+    for i in range(0, 10):
+        tx = i*sub_length
+        ty = (i+1)*sub_length
+        tempaudio = audio[tx:ty]
+        tempaudio.export(
+            f'conversation_analysis/training_set/speaker-sample{i}.wav', format="wav")
+        tempaudio.export(
+            f'conversation_analysis/training_set/me-sample{i+5}.wav', format="wav")
+
+
+def speaker_train2(audioFilePath):
     audio = AudioSegment.from_file(audioFilePath)
     length_ms = len(audio)
     print(length_ms)
-    sub_length=math.floor(length_ms/10)
-    for i in range (0,10):
-        tx=i*sub_length
-        ty=(i+1)*sub_length
+    sub_length = math.floor(length_ms/10)
+    for i in range(0, 10):
+        tx = i*sub_length
+        ty = (i+1)*sub_length
         tempaudio = audio[tx:ty]
-        tempaudio.export(f'conversation_analysis/training_set/speaker-sample{i}.wav', format="wav")
+        tempaudio.export(
+            f'conversation_analysis/training_set/speaker-sample{i}.wav', format="wav")
         # print(i*sub_length, "to", (i+1)*sub_length)
     # train_model()
 
-def main_function(audioPatient, audioConversation): # input the patient's audio path and the conversation's audio path, and output the conversation in the form of a dialogue
+
+# input the patient's audio path and the conversation's audio path, and output the conversation in the form of a dialogue
+def main_function(audioPatient, audioConversation):
+    speaker_train(audioConversation)
     patient_train(audioPatient)
-    temp_labelling=split_audio(audioConversation)
+    temp_labelling = split_audio(audioConversation)
     conversation = speech_to_dialogue(temp_labelling)
     return conversation
 
